@@ -287,6 +287,59 @@ namespace DurangoInteropDotnet
             // Console.WriteLine($"Created Filter Id 0x{FilterId:X}");
         }
 
+        public static NativeBridge.FWPM_FILTER0[] GetFilters()
+        {
+            IntPtr engine = OpenFWPSession();
+            try
+            {
+                InstallFWPMProvider(engine);
+                return GetFilters(engine);
+            }
+            finally
+            {
+                CloseFWPSession(engine);
+            }
+        }
+
+        public static NativeBridge.FWPM_FILTER0[] GetFilters(IntPtr intPtr)
+        {
+            IntPtr pEnumHandle = IntPtr.Zero;
+            IntPtr pEntries = IntPtr.Zero;
+            uint numEntriesReturned = 0;
+            try
+            {
+                uint result = NativeBridge.FwpmFilterCreateEnumHandle0(intPtr, IntPtr.Zero, ref pEnumHandle);
+                if (result != 0)
+                {
+                    throw new Exception($"FwpmFilterCreateEnumHandle0 returned a non-zero result: 0x{result:X} (Error: 0x{Marshal.GetLastWin32Error():X})");
+                }
+
+                result = NativeBridge.FwpmFilterEnum0(intPtr, pEnumHandle, 0xFFFFFFFF, ref pEntries, ref numEntriesReturned);
+                if (result != 0)
+                {
+                    throw new Exception($"FwpmFilterEnum0 returned a non-zero result: 0x{result:X} (Error: 0x{Marshal.GetLastWin32Error():X})");
+                }
+
+                var filters = new NativeBridge.FWPM_FILTER0[numEntriesReturned];
+                for (int i = 0; i < numEntriesReturned; i++)
+                {
+                    filters[i] = Marshal.PtrToStructure<NativeBridge.FWPM_FILTER0>(pEntries + (i * Marshal.SizeOf<NativeBridge.FWPM_FILTER0>()));
+                }
+                return filters;
+            }
+            finally
+            {
+                if (pEnumHandle != IntPtr.Zero)
+                {
+                    NativeBridge.FwpmFilterDestroyEnumHandle0(intPtr, pEnumHandle);
+                }
+                if (pEntries != IntPtr.Zero)
+                {
+                    Marshal.FreeHGlobal(pEntries);
+                }
+            }
+        }
+
         public static class NativeBridge
         {
 
@@ -339,6 +392,24 @@ namespace DurangoInteropDotnet
             public static uint FwpmProviderAdd0(IntPtr engineHandle, ref FWPM_PROVIDER0 provider, IntPtr sd)
             {
                 return GetDelegate<FwpmProviderAdd0Delegate>("FWPUClnt.dll", "FwpmProviderAdd0")(engineHandle, ref provider, sd);
+            }
+
+            public delegate uint FwpmFilterCreateEnumHandle0Delegate(IntPtr engineHandle, IntPtr enumTemplate, ref IntPtr enumHandle);
+            public static uint FwpmFilterCreateEnumHandle0(IntPtr engineHandle, IntPtr enumTemplate, ref IntPtr enumHandle)
+            {
+                return GetDelegate<FwpmFilterCreateEnumHandle0Delegate>("FWPUClnt.dll", "FwpmFilterCreateEnumHandle0")(engineHandle, enumTemplate, ref enumHandle);
+            }
+
+            public delegate uint FwpmFilterEnum0Delegate(IntPtr engineHandle, IntPtr enumHandle, uint numEntriesRequested, ref IntPtr entries, ref uint numEntriesReturned);
+            public static uint FwpmFilterEnum0(IntPtr engineHandle, IntPtr enumHandle, uint numEntriesRequested, ref IntPtr entries, ref uint numEntriesReturned)
+            {
+                return GetDelegate<FwpmFilterEnum0Delegate>("FWPUClnt.dll", "FwpmFilterEnum0")(engineHandle, enumHandle, numEntriesRequested, ref entries, ref numEntriesReturned);
+            }
+
+            public delegate uint FwpmFilterDestroyEnumHandle0Delegate(IntPtr engineHandle, IntPtr enumHandle);
+            public static uint FwpmFilterDestroyEnumHandle0(IntPtr engineHandle, IntPtr enumHandle)
+            {
+                return GetDelegate<FwpmFilterDestroyEnumHandle0Delegate>("FWPUClnt.dll", "FwpmFilterDestroyEnumHandle0")(engineHandle, enumHandle);
             }
 
             // UWP won't allow importing from FWPUClnt.dll
